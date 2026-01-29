@@ -2,23 +2,22 @@ import createContextHook from '@nkzw/create-context-hook';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Project, StockItem, Task, WorkflowStage, Notification, DashboardStats, TaskReport } from '@/types';
-import { mockProjects, mockStockItems, mockNotifications } from '@/mocks/data';
 
 const PROJECTS_STORAGE_KEY = '@ideal_cuisine_projects';
 const STOCK_STORAGE_KEY = '@ideal_cuisine_stock';
 const NOTIFICATIONS_STORAGE_KEY = '@ideal_cuisine_notifications';
 
 export const [DataProvider, useData] = createContextHook(() => {
-  const [projects, setProjects] = useState<Project[]>(mockProjects);
-  const [stockItems, setStockItems] = useState<StockItem[]>(mockStockItems);
-  const [notifications, setNotifications] = useState<Notification[]>(mockNotifications);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [stockItems, setStockItems] = useState<StockItem[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    loadStoredData();
+    initializeData();
   }, []);
 
-  const loadStoredData = async () => {
+  const initializeData = async () => {
     try {
       const [storedProjects, storedStock, storedNotifications] = await Promise.all([
         AsyncStorage.getItem(PROJECTS_STORAGE_KEY),
@@ -29,8 +28,10 @@ export const [DataProvider, useData] = createContextHook(() => {
       if (storedProjects) setProjects(JSON.parse(storedProjects));
       if (storedStock) setStockItems(JSON.parse(storedStock));
       if (storedNotifications) setNotifications(JSON.parse(storedNotifications));
+      
+      console.log('Data context initialized - ready for Supabase connection');
     } catch (error) {
-      console.log('Error loading data:', error);
+      console.log('Error initializing data:', error);
     } finally {
       setIsLoading(false);
     }
@@ -47,6 +48,24 @@ export const [DataProvider, useData] = createContextHook(() => {
   const saveNotifications = async (data: Notification[]) => {
     await AsyncStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(data));
   };
+
+  const syncProjectsFromDatabase = useCallback(async (dbProjects: Project[]) => {
+    setProjects(dbProjects);
+    await saveProjects(dbProjects);
+    console.log('Projects synced from database:', dbProjects.length);
+  }, []);
+
+  const syncStockFromDatabase = useCallback(async (dbStock: StockItem[]) => {
+    setStockItems(dbStock);
+    await saveStock(dbStock);
+    console.log('Stock synced from database:', dbStock.length);
+  }, []);
+
+  const syncNotificationsFromDatabase = useCallback(async (dbNotifications: Notification[]) => {
+    setNotifications(dbNotifications);
+    await saveNotifications(dbNotifications);
+    console.log('Notifications synced from database:', dbNotifications.length);
+  }, []);
 
   const createProject = useCallback(async (projectData: Omit<Project, 'id' | 'workflow' | 'files' | 'createdAt' | 'updatedAt'>) => {
     const newProject: Project = {
@@ -392,5 +411,8 @@ export const [DataProvider, useData] = createContextHook(() => {
     addNotification,
     clearAllNotifications,
     getProjectById,
+    syncProjectsFromDatabase,
+    syncStockFromDatabase,
+    syncNotificationsFromDatabase,
   };
 });

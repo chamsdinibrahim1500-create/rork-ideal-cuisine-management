@@ -7,7 +7,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Alert,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Mail, Lock, ChefHat } from 'lucide-react-native';
@@ -19,9 +18,9 @@ import { Button } from '@/components/Button';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function LoginScreen() {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const { t } = useLanguage();
-  const { login, isAuthenticated } = useAuth();
+  const { login, isAuthenticated, authError } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -44,7 +43,7 @@ export default function LoginScreen() {
         useNativeDriver: true,
       }),
     ]).start();
-  }, []);
+  }, [fadeAnim, slideAnim]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -143,9 +142,9 @@ export default function LoginScreen() {
                 testID="password-input"
               />
 
-              {error ? (
+              {error || authError ? (
                 <Text style={[styles.error, { color: colors.status.inProgress }]}>
-                  {error}
+                  {error || authError}
                 </Text>
               ) : null}
 

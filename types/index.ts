@@ -48,12 +48,12 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  password: string;
   role: UserRole;
   avatar?: string;
   permissions: UserPermissions;
   isActive: boolean;
   createdAt: string;
+  supabaseId?: string;
 }
 
 export interface Message {

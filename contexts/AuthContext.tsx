@@ -1,7 +1,8 @@
 import createContextHook from '@nkzw/create-context-hook';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { User, UserPermissions, Message } from '@/types';
+import { User, UserPermissions, Message, Notification } from '@/types';
+import { mockUsers, DEVELOPER_CREDENTIALS } from '@/mocks/data';
 import { getDefaultPermissions } from '@/constants/permissions';
 
 const AUTH_STORAGE_KEY = '@ideal_cuisine_auth';
@@ -10,61 +11,68 @@ const MESSAGES_STORAGE_KEY = '@ideal_cuisine_messages';
 
 export const [AuthProvider, useAuth] = createContextHook(() => {
   const [user, setUser] = useState<User | null>(null);
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<User[]>(mockUsers);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
-    initializeAuth();
+    loadStoredAuth();
   }, []);
 
-  const initializeAuth = async () => {
+  const loadStoredAuth = async () => {
     try {
-      const [storedUsers, storedMessages] = await Promise.all([
+      const [storedAuth, storedUsers, storedMessages] = await Promise.all([
+        AsyncStorage.getItem(AUTH_STORAGE_KEY),
         AsyncStorage.getItem(USERS_STORAGE_KEY),
         AsyncStorage.getItem(MESSAGES_STORAGE_KEY),
       ]);
 
       if (storedUsers) {
-        setUsers(JSON.parse(storedUsers));
+        const parsedUsers = JSON.parse(storedUsers);
+        const hasDev = parsedUsers.some((u: User) => u.role === 'developer');
+        if (!hasDev) {
+          parsedUsers.unshift(mockUsers[0]);
+        }
+        setUsers(parsedUsers);
       }
 
       if (storedMessages) {
         setMessages(JSON.parse(storedMessages));
       }
 
-      console.log('Auth context initialized - ready for Supabase connection');
+      if (storedAuth) {
+        const userData = JSON.parse(storedAuth);
+        setUser(userData);
+        setIsAuthenticated(true);
+      }
     } catch (error) {
-      console.log('Error initializing auth:', error);
+      console.log('Error loading auth:', error);
     } finally {
       setIsLoading(false);
     }
   };
 
   const login = useCallback(async (email: string, password: string): Promise<boolean> => {
-    setAuthError(null);
+    const foundUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
     
-    console.log('Login attempt - Supabase integration required');
-    console.log('Email:', email);
+    if (foundUser && foundUser.password === password && foundUser.isActive) {
+      setUser(foundUser);
+      setIsAuthenticated(true);
+      await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(foundUser));
+      console.log('Login successful:', foundUser.name);
+      return true;
+    }
     
-    setAuthError('Authentication not configured. Please connect to Supabase.');
+    console.log('Login failed for:', email);
     return false;
-  }, []);
+  }, [users]);
 
   const logout = useCallback(async () => {
     setUser(null);
     setIsAuthenticated(false);
     await AsyncStorage.removeItem(AUTH_STORAGE_KEY);
     console.log('User logged out');
-  }, []);
-
-  const setAuthenticatedUser = useCallback(async (userData: User) => {
-    setUser(userData);
-    setIsAuthenticated(true);
-    await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(userData));
-    console.log('User authenticated:', userData.name);
   }, []);
 
   const hasPermission = useCallback((permission: keyof UserPermissions): boolean => {
@@ -103,7 +111,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     return true;
   }, [user, users]);
 
-  const createUser = useCallback(async (userData: Omit<User, 'id' | 'permissions' | 'createdAt' | 'isActive'>) => {
+  const createUser = useCallback(async (userData: Omit<User, 'id' | 'permissions' | 'createdAt' | 'isActive'> & { password: string }) => {
     if (!user || user.role !== 'developer') {
       console.log('Only developers can create users');
       return null;
@@ -295,18 +303,6 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     return true;
   }, [user, users]);
 
-  const syncUsersFromDatabase = useCallback(async (dbUsers: User[]) => {
-    setUsers(dbUsers);
-    await AsyncStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(dbUsers));
-    console.log('Users synced from database:', dbUsers.length);
-  }, []);
-
-  const syncMessagesFromDatabase = useCallback(async (dbMessages: Message[]) => {
-    setMessages(dbMessages);
-    await AsyncStorage.setItem(MESSAGES_STORAGE_KEY, JSON.stringify(dbMessages));
-    console.log('Messages synced from database:', dbMessages.length);
-  }, []);
-
   return {
     user,
     users: getAllUsers,
@@ -316,11 +312,9 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     conversations: getConversations,
     isLoading,
     isAuthenticated,
-    authError,
     login,
     logout,
     loginAsUser,
-    setAuthenticatedUser,
     hasPermission,
     updateUserPermissions,
     createUser,
@@ -332,7 +326,5 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     getMessagesForUser,
     markMessageAsRead,
     getUnreadMessagesCount,
-    syncUsersFromDatabase,
-    syncMessagesFromDatabase,
   };
 });
